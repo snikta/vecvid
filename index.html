@@ -21,8 +21,8 @@
     <script src="simplify.js"></script>
     <script>
         let canvasEl = document.createElement('canvas')
-        canvasEl.width = 1920
-        canvasEl.height = 800
+        canvasEl.width = 960
+        canvasEl.height = 400
         document.body.appendChild(canvasEl)
 
         let ctx = canvasEl.getContext('2d')
@@ -37,133 +37,177 @@
                 let byteLen = bytes.length
                 let bitIndex = 0
                 let byteIndex = 0
+				let state = {ready: false}
+				
+				let pos = 0
+				let frameSizes = []
+				let frameCount = bytes.charCodeAt(pos) << 8 | bytes.charCodeAt(pos + 1) & 0xFF
+				pos = 2
+				frameCount--
+				function getBit() {
+					if (bitIndex == 8) {
+						bitIndex = 0
+						byteIndex++
+					}
+					if (byteIndex >= byteLen) {
+						return false
+					}
+					let bit = (bytes.charCodeAt(byteIndex) & (1 << (7 - bitIndex))) != 0 ? '1' : '0'
+					bitIndex++
+					return bit
+				}
 
-                function getBit() {
-                    if (bitIndex == 8) {
-                        bitIndex = 0
-                        byteIndex++
-                    }
-                    if (byteIndex >= byteLen) {
-                        return false
-                    }
-                    let bit = (bytes.charCodeAt(byteIndex) & (1 << (7 - bitIndex))) != 0 ? '1' : '0'
-                    bitIndex++
-                    return bit
-                }
+				function getByte() {
+					return getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit()
+				}
 
-                function getByte() {
-                    return getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit()
-                }
+				let mSmallDeltas = {
+					0b00: -1,
+					0b01: 0,
+					0b10: 1
+				}
 
-                let mSmallDeltas = {
-                    0b00: -1,
-                    0b01: 0,
-                    0b10: 1
-                }
+				let byteIdx = 2
+				for (let i = 0; i < frameCount; i++) {
+					let frameBytes = bytes.charCodeAt(pos) << 16 | bytes.charCodeAt(pos+1) << 8 | bytes.charCodeAt(pos+2) & 0xFF
+					let frameBits = bytes.charCodeAt(pos+3) & 0xFF
+					byteIdx += frameBytes
+					frameSizes.push({bytes: byteIdx, bits: frameBits})
+					pos += 4
+				}
+				console.log(frameSizes)
+				
+				state.fIndex = 0
+				
+				let preBytes = pos
+				
+				function playFrame() {
+				    let sTime = Number(new Date)
+					if (state.fIndex>0) {
+						byteIndex = preBytes - 2 + frameSizes[state.fIndex].bytes
+						bitIndex = frameSizes[state.fIndex].bits
+					}
+					else {
+						byteIndex = pos
+						bitIndex = 0
+					}
 
-                let colorCount = getByte() << 8
-                colorCount |= getByte()
+					let colorCount = getByte() << 8
+					colorCount |= getByte()
 
-                let shapes = []
-                let colors = []
+					let shapes = []
+					let colors = []
 
-                let imdata = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
+					ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
 
-                for (let colorIndex = 0; colorIndex < colorCount; colorIndex++) {
-                    let red = getByte()
-                    let green = getByte()
-                    let blue = getByte()
+					let imdata = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
 
-                    let contourCount = getByte() << 8
-                    contourCount |= getByte()
+					for (let colorIndex = 0; colorIndex < colorCount; colorIndex++) {
+						let red = getByte()
+						let green = getByte()
+						let blue = getByte()
 
-                    for (let contourIndex = 0; contourIndex < contourCount; contourIndex++) {
-                        colors.push('rgb(' + red + ',' + green + ',' + blue + ')')
-                        let firstPointX = getByte() << 8
-                        firstPointX |= getByte()
-                        
-                        let firstPointY = getByte() << 8
-                        firstPointY |= getByte()
+						let contourCount = getByte() << 8
+						contourCount |= getByte()
 
-                        let innerContourCount = getByte() << 8
-                        innerContourCount |= getByte()
+						for (let contourIndex = 0; contourIndex < contourCount; contourIndex++) {
+							colors.push('rgb(' + red + ',' + green + ',' + blue + ')')
+							let firstPointX = getByte() << 8
+							firstPointX |= getByte()
+							
+							let firstPointY = getByte() << 8
+							firstPointY |= getByte()
 
-                        let curPoint = {x: firstPointX, y: firstPointY}
-                        let curDelta
+							let innerContourCount = getByte() << 8
+							innerContourCount |= getByte()
 
-                        let idx = 1920 * curPoint.y * 4 + curPoint.x * 4
-                        imdata.data[idx] = red
-                        imdata.data[idx + 1] = green
-                        imdata.data[idx + 2] = blue
-                        imdata.data[idx + 3] = 255
+							let curPoint = {x: firstPointX, y: firstPointY}
+							let curDelta
 
-                        let knots = [curPoint]
+							let idx = 960 * curPoint.y * 4 + curPoint.x * 4
+							imdata.data[idx] = red
+							imdata.data[idx + 1] = green
+							imdata.data[idx + 2] = blue
+							imdata.data[idx + 3] = 255
 
-                        for (let innerContourIndex = 1; innerContourIndex < innerContourCount; innerContourIndex++) {
-                            let bitIsDifferent = getBit() == '1'
+							let knots = [curPoint]
 
-                            if (bitIsDifferent) {
-                                let x = mSmallDeltas[getBit() << 1 | getBit()]
-                                let y = mSmallDeltas[getBit() << 1 | getBit()]
-                                curDelta = {x: x, y: y}
-                            } else {
-                            }
-                            
-                            curPoint.x += curDelta.x
-                            curPoint.y += curDelta.y
+							for (let innerContourIndex = 1; innerContourIndex < innerContourCount; innerContourIndex++) {
+								let bitIsDifferent = getBit() == '1'
 
-                            knots.push({x: curPoint.x, y: curPoint.y})
-                            
-                            let idx = 1920 * curPoint.y * 4 + curPoint.x * 4
+								if (bitIsDifferent) {
+									let x = mSmallDeltas[getBit() << 1 | getBit()]
+									let y = mSmallDeltas[getBit() << 1 | getBit()]
+									curDelta = {x: x, y: y}
+								} else {
+								}
+								
+								curPoint.x += curDelta.x
+								curPoint.y += curDelta.y
 
-                            imdata.data[idx] = red
-                            imdata.data[idx + 1] = green
-                            imdata.data[idx + 2] = blue
-                            imdata.data[idx + 3] = 255
-                        }
+								knots.push({x: curPoint.x, y: curPoint.y})
+								
+								let idx = 960 * curPoint.y * 4 + curPoint.x * 4
 
-                        shapes.push(knots)
-                    }
-                }
-                
-                for (let y = 0, rows = 800; y < rows; y++) {
-                    for (let x = 0, cols = 1920 - 1; x < cols; x++) {
-                        let idx = y * 1920 * 4 + x * 4
-                        let idx_next = y * 1920 * 4 + (x+1) * 4
-                        if (imdata.data[idx_next + 3] != 255) {
-                            imdata.data[idx_next] = imdata.data[idx]
-                            imdata.data[idx_next + 1] = imdata.data[idx + 1]
-                            imdata.data[idx_next + 2] = imdata.data[idx + 2]
-                            imdata.data[idx_next + 3] = 255
-                        }
-                    }
-                }
+								imdata.data[idx] = red
+								imdata.data[idx + 1] = green
+								imdata.data[idx + 2] = blue
+								imdata.data[idx + 3] = 255
+							}
 
-                ctx.putImageData(imdata, 0, 0)
+							shapes.push(knots)
+						}
+					}
+					
+					for (let y = 0, rows = 400; y < rows; y++) {
+						for (let x = 0, cols = 960 - 1; x < cols; x++) {
+							let idx = y * 960 * 4 + x * 4
+							let idx_next = y * 960 * 4 + (x+1) * 4
+							if (imdata.data[idx_next + 3] != 255) {
+								imdata.data[idx_next] = imdata.data[idx]
+								imdata.data[idx_next + 1] = imdata.data[idx + 1]
+								imdata.data[idx_next + 2] = imdata.data[idx + 2]
+								imdata.data[idx_next + 3] = 255
+							}
+						}
+					}
 
-                /*ctx.lineWidth = 2
-                ctx.lineCap = 'round'
-                ctx.lineJoin = 'round'
-                for (let shapeIndex = 0, shapeCount = shapes.length; shapeIndex < shapeCount; shapeIndex++) {
-                    ctx.strokeStyle = colors[shapeIndex]
-                    let knots = simplify(shapes[shapeIndex], 0)
-                    let strokey = {x: [], y: []}
-                    for (let knotIndex = 0, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
-                        strokey.x.push(knots[knotIndex].x)
-                        strokey.y.push(knots[knotIndex].y)
-                    }
-                    let prims = addstroke(strokey, 0, 0)
-                    ctx.beginPath()
-                    ctx.moveTo(knots[0].x, knots[0].y)
-                    for (let knotIndex = 1, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
-                        ctx.lineTo(knots[knotIndex].x, knots[knotIndex].y)
-                    }
-                    for (let primIndex = 0, primCount = prims.length; primIndex < primCount; primIndex++) {
-                        prims[primIndex].render(ctx)
-                    }
-                    ctx.closePath()
-                    ctx.stroke()
-                }*/
+					ctx.putImageData(imdata, 0, 0)
+
+					ctx.lineWidth = 2
+					ctx.lineCap = 'round'
+					ctx.lineJoin = 'round'
+					for (let shapeIndex = 0, shapeCount = shapes.length; shapeIndex < shapeCount; shapeIndex++) {
+						ctx.strokeStyle = colors[shapeIndex]
+						let knots = simplify(shapes[shapeIndex], 0)
+						let strokey = {x: [], y: []}
+						for (let knotIndex = 0, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
+							strokey.x.push(knots[knotIndex].x)
+							strokey.y.push(knots[knotIndex].y)
+						}
+						let prims = addstroke(strokey, 0, 0)
+						ctx.beginPath()
+						ctx.moveTo(knots[0].x, knots[0].y)
+						for (let knotIndex = 1, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
+							ctx.lineTo(knots[knotIndex].x, knots[knotIndex].y)
+						}
+						for (let primIndex = 0, primCount = prims.length; primIndex < primCount; primIndex++) {
+							prims[primIndex].render(ctx)
+						}
+						ctx.closePath()
+						ctx.stroke()
+					}
+					
+					state.fIndex++
+					let fTime = Number(new Date) - sTime
+					//state.prevFrame = imdata.data
+					if (fTime > 41) {
+						setTimeout(playFrame, 0)
+					} else {
+						setTimeout(playFrame, 41 - fTime)
+					}
+				}
+				playFrame()
             }
             reader.readAsBinaryString(bitstream)
         }
