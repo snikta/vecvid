@@ -71,17 +71,17 @@
 				}
 
 				let mSmallDeltas = {
-					0b00: -1,
+					/*0b00: -1,
  					0b01: 0,
-					0b10: 1
-					/*0b000: {x: -1, y: -1},
+					0b10: 1*/
+					0b000: {x: -1, y: -1},
 					0b001: {x: -1, y: 0},
 					0b010: {x: -1, y: 1},
 					0b011: {x: 0, y: -1},
 					0b100: {x: 0, y: 1},
 					0b101: {x: 1, y: -1},
 					0b110: {x: 1, y: 0},
-					0b111: {x: 1, y: 1}*/
+					0b111: {x: 1, y: 1}
 				}
 
 				let byteIdx = 2
@@ -97,7 +97,7 @@
 				state.fIndex = 0
 				
 				let preBytes = pos
-				
+				window.contourSum = 0
 				function playFrame() {
 				    let sTime = Number(new Date)
 					if (state.fIndex>0) {
@@ -127,20 +127,31 @@
 						let green = getByte()
 						let blue = getByte()
 
-						let contourCount = getByte() << 8
-						contourCount |= getByte()
+						let contourCount
+						
+						contourCount = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
+						
+						window.contourSum += contourCount
 						
 						let knots = []
 
 						for (let contourIndex = 0; contourIndex < contourCount; contourIndex++) {
-							let firstPointX = getByte() << 8
-							firstPointX |= getByte()
+							let firstPointX = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
 							
-							let firstPointY = getByte() << 8
-							firstPointY |= getByte()
+							let firstPointY = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
 
-							let innerContourCount = getByte() << 8
-							innerContourCount |= getByte()
+							let innerContourCount
+							
+							if (getBit() == '1') {
+								if (getBit() == '1') {
+									innerContourCount = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
+								}
+								else {
+									innerContourCount = getByte()
+								}
+							} else {
+								innerContourCount = 1;
+							}
 
 							let curPoint = {x: firstPointX, y: firstPointY}
 							let curDelta = {x: 0, y: 0}
@@ -163,8 +174,9 @@
 										x = (getBit() == '1' ? -1 : 1) * (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
 										y = (getBit() == '1' ? -1 : 1) * (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
 									} else {
-										x = mSmallDeltas[getBit() << 1 | getBit()]
-										y = mSmallDeltas[getBit() << 1 | getBit()]
+										let delta = mSmallDeltas[getBit() << 2 | getBit() << 1 | getBit()]
+										x = delta.x
+										y = delta.y
 									}
 									curDelta = {x: x, y: y}
 								} else {
