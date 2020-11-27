@@ -20,6 +20,7 @@
     <script src="jSignature.js"></script>
     <script src="simplify.js"></script>
     <script>
+	
         let canvasEl = document.createElement('canvas')
         canvasEl.width = 960
         canvasEl.height = 400
@@ -43,7 +44,7 @@
 				let frameSizes = []
 				let frameCount = bytes.charCodeAt(pos) << 8 | bytes.charCodeAt(pos + 1) & 0xFF
 				pos = 2
-				frameCount--
+				//frameCount--
 				function getBit() {
 					if (bitIndex == 8) {
 						bitIndex = 0
@@ -56,15 +57,23 @@
 					bitIndex++
 					return bit
 				}
-
+				
 				function getByte() {
 					return getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit()
 				}
 
 				let mSmallDeltas = {
 					0b00: -1,
-					0b01: 0,
+ 					0b01: 0,
 					0b10: 1
+					/*0b000: {x: -1, y: -1},
+					0b001: {x: -1, y: 0},
+					0b010: {x: -1, y: 1},
+					0b011: {x: 0, y: -1},
+					0b100: {x: 0, y: 1},
+					0b101: {x: 1, y: -1},
+					0b110: {x: 1, y: 0},
+					0b111: {x: 1, y: 1}*/
 				}
 
 				let byteIdx = 2
@@ -103,6 +112,9 @@
 					let imdata = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
 
 					for (let colorIndex = 0; colorIndex < colorCount; colorIndex++) {
+						if (getBit() == '0') {
+							continue;
+						}
 						let red = getByte()
 						let green = getByte()
 						let blue = getByte()
@@ -111,7 +123,6 @@
 						contourCount |= getByte()
 
 						for (let contourIndex = 0; contourIndex < contourCount; contourIndex++) {
-							colors.push('rgb(' + red + ',' + green + ',' + blue + ')')
 							let firstPointX = getByte() << 8
 							firstPointX |= getByte()
 							
@@ -122,7 +133,7 @@
 							innerContourCount |= getByte()
 
 							let curPoint = {x: firstPointX, y: firstPointY}
-							let curDelta
+							let curDelta = {x: 0, y: 0}
 
 							let idx = 960 * curPoint.y * 4 + curPoint.x * 4
 							imdata.data[idx] = red
@@ -136,15 +147,22 @@
 								let bitIsDifferent = getBit() == '1'
 
 								if (bitIsDifferent) {
-									let x = mSmallDeltas[getBit() << 1 | getBit()]
-									let y = mSmallDeltas[getBit() << 1 | getBit()]
+									let x;
+									let y;
+									if (getBit() == '1') {
+										x = (getBit() == '1' ? -1 : 1) * (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
+										y = (getBit() == '1' ? -1 : 1) * (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
+									} else {
+										x = mSmallDeltas[getBit() << 1 | getBit()]
+										y = mSmallDeltas[getBit() << 1 | getBit()]
+									}
 									curDelta = {x: x, y: y}
 								} else {
 								}
 								
 								curPoint.x += curDelta.x
 								curPoint.y += curDelta.y
-
+								
 								knots.push({x: curPoint.x, y: curPoint.y})
 								
 								let idx = 960 * curPoint.y * 4 + curPoint.x * 4
@@ -172,38 +190,42 @@
 						}
 					}
 
-					ctx.putImageData(imdata, 0, 0)
-
-					ctx.lineWidth = 2
+					/*ctx.lineWidth = 1
 					ctx.lineCap = 'round'
 					ctx.lineJoin = 'round'
+					ctx.strokeStyle = '#000000'
 					for (let shapeIndex = 0, shapeCount = shapes.length; shapeIndex < shapeCount; shapeIndex++) {
-						ctx.strokeStyle = colors[shapeIndex]
-						let knots = simplify(shapes[shapeIndex], 0)
+						//colors[shapeIndex]
+						let knots = shapes[shapeIndex]
+						
+
 						let strokey = {x: [], y: []}
 						for (let knotIndex = 0, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
 							strokey.x.push(knots[knotIndex].x)
 							strokey.y.push(knots[knotIndex].y)
 						}
 						let prims = addstroke(strokey, 0, 0)
+						ctx.lineWidth = 2
 						ctx.beginPath()
 						ctx.moveTo(knots[0].x, knots[0].y)
-						for (let knotIndex = 1, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
-							ctx.lineTo(knots[knotIndex].x, knots[knotIndex].y)
-						}
+						//for (let knotIndex = 1, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
+						//	ctx.lineTo(knots[knotIndex].x, knots[knotIndex].y)
+						//}
 						for (let primIndex = 0, primCount = prims.length; primIndex < primCount; primIndex++) {
 							prims[primIndex].render(ctx)
 						}
-						ctx.closePath()
+						//ctx.closePath()
 						ctx.stroke()
-					}
+					}*/
 					
 					state.fIndex++
 					let fTime = Number(new Date) - sTime
 					//state.prevFrame = imdata.data
 					if (fTime > 41) {
+						ctx.putImageData(imdata, 0, 0)
 						setTimeout(playFrame, 0)
 					} else {
+						ctx.putImageData(imdata, 0, 0)
 						setTimeout(playFrame, 41 - fTime)
 					}
 				}
