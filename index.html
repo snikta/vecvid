@@ -8,6 +8,7 @@
         overflow: hidden;
         margin: 0;
         padding: 0;
+		background: #000000;
     }
     </style>
     <title>vecvid</title>
@@ -20,10 +21,17 @@
     <script src="jSignature.js"></script>
     <script src="simplify.js"></script>
     <script>
+		const FRAME_WIDTH = 1920
+		const FRAME_HEIGHT = 800
 	
         let canvasEl = document.createElement('canvas')
-        canvasEl.width = 960
-        canvasEl.height = 400
+        canvasEl.width = FRAME_WIDTH
+        canvasEl.height = FRAME_HEIGHT
+		let canvasWidth = innerWidth
+		let canvasHeight = 800/1920 * innerWidth
+		canvasEl.style.width = canvasWidth + 'px'
+		canvasEl.style.height = canvasHeight + 'px'
+		canvasEl.style.margin = ((innerHeight - canvasHeight) / 2) + 'px 0px'
         document.body.appendChild(canvasEl)
 
         let ctx = canvasEl.getContext('2d')
@@ -121,6 +129,8 @@
 
 						let contourCount = getByte() << 8
 						contourCount |= getByte()
+						
+						let knots = []
 
 						for (let contourIndex = 0; contourIndex < contourCount; contourIndex++) {
 							let firstPointX = getByte() << 8
@@ -135,13 +145,13 @@
 							let curPoint = {x: firstPointX, y: firstPointY}
 							let curDelta = {x: 0, y: 0}
 
-							let idx = 960 * curPoint.y * 4 + curPoint.x * 4
+							let idx = FRAME_WIDTH * curPoint.y * 4 + curPoint.x * 4
 							imdata.data[idx] = red
 							imdata.data[idx + 1] = green
 							imdata.data[idx + 2] = blue
 							imdata.data[idx + 3] = 255
 
-							let knots = [curPoint]
+							knots.push(curPoint)
 
 							for (let innerContourIndex = 1; innerContourIndex < innerContourCount; innerContourIndex++) {
 								let bitIsDifferent = getBit() == '1'
@@ -165,22 +175,23 @@
 								
 								knots.push({x: curPoint.x, y: curPoint.y})
 								
-								let idx = 960 * curPoint.y * 4 + curPoint.x * 4
+								let idx = FRAME_WIDTH * curPoint.y * 4 + curPoint.x * 4
 
 								imdata.data[idx] = red
 								imdata.data[idx + 1] = green
 								imdata.data[idx + 2] = blue
 								imdata.data[idx + 3] = 255
 							}
-
+							
 							shapes.push(knots)
+							knots = []
 						}
 					}
 					
-					for (let y = 0, rows = 400; y < rows; y++) {
-						for (let x = 0, cols = 960 - 1; x < cols; x++) {
-							let idx = y * 960 * 4 + x * 4
-							let idx_next = y * 960 * 4 + (x+1) * 4
+					for (let y = 0, rows = FRAME_HEIGHT; y < rows; y++) {
+						for (let x = 0, cols = FRAME_WIDTH - 1; x < cols; x++) {
+							let idx = y * FRAME_WIDTH * 4 + x * 4
+							let idx_next = y * FRAME_WIDTH * 4 + (x+1) * 4
 							if (imdata.data[idx_next + 3] != 255) {
 								imdata.data[idx_next] = imdata.data[idx]
 								imdata.data[idx_next + 1] = imdata.data[idx + 1]
@@ -189,6 +200,8 @@
 							}
 						}
 					}
+					
+					ctx.putImageData(imdata, 0, 0)
 
 					/*ctx.lineWidth = 1
 					ctx.lineCap = 'round'
@@ -208,12 +221,12 @@
 						ctx.lineWidth = 2
 						ctx.beginPath()
 						ctx.moveTo(knots[0].x, knots[0].y)
-						//for (let knotIndex = 1, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
-						//	ctx.lineTo(knots[knotIndex].x, knots[knotIndex].y)
-						//}
-						for (let primIndex = 0, primCount = prims.length; primIndex < primCount; primIndex++) {
-							prims[primIndex].render(ctx)
+						for (let knotIndex = 1, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
+							ctx.lineTo(knots[knotIndex].x, knots[knotIndex].y)
 						}
+						//for (let primIndex = 0, primCount = prims.length; primIndex < primCount; primIndex++) {
+						//	prims[primIndex].render(ctx)
+						//}
 						//ctx.closePath()
 						ctx.stroke()
 					}*/
@@ -222,10 +235,8 @@
 					let fTime = Number(new Date) - sTime
 					//state.prevFrame = imdata.data
 					if (fTime > 41) {
-						ctx.putImageData(imdata, 0, 0)
 						setTimeout(playFrame, 0)
 					} else {
-						ctx.putImageData(imdata, 0, 0)
 						setTimeout(playFrame, 41 - fTime)
 					}
 				}
