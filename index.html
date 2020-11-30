@@ -27,11 +27,11 @@
         let canvasEl = document.createElement('canvas')
         canvasEl.width = FRAME_WIDTH
         canvasEl.height = FRAME_HEIGHT
-		let canvasWidth = innerWidth
-		let canvasHeight = 800/1920 * innerWidth
+		let canvasWidth = FRAME_WIDTH / 3
+		let canvasHeight = FRAME_HEIGHT / 3
 		canvasEl.style.width = canvasWidth + 'px'
 		canvasEl.style.height = canvasHeight + 'px'
-		canvasEl.style.margin = ((innerHeight - canvasHeight) / 2) + 'px 0px'
+		canvasEl.style.margin = ((innerHeight - canvasHeight) / 2) + 'px ' + ((innerWidth - canvasWidth) / 2) + 'px'
         document.body.appendChild(canvasEl)
 
         let ctx = canvasEl.getContext('2d')
@@ -42,7 +42,7 @@
             let reader = new FileReader
             let bitstream = this.response
             reader.onload = function () {
-                let bytes = this.result
+                let bytes = new Uint8ClampedArray(this.result)
                 let byteLen = bytes.length
                 let bitIndex = 0
                 let byteIndex = 0
@@ -50,7 +50,7 @@
 				
 				let pos = 0
 				let frameSizes = []
-				let frameCount = bytes.charCodeAt(pos) << 8 | bytes.charCodeAt(pos + 1) & 0xFF
+				let frameCount = bytes[pos] << 8 | bytes[pos + 1] & 0xFF
 				pos = 2
 				//frameCount--
 				function getBit() {
@@ -61,7 +61,7 @@
 					if (byteIndex >= byteLen) {
 						return false
 					}
-					let bit = (bytes.charCodeAt(byteIndex) & (1 << (7 - bitIndex))) != 0 ? '1' : '0'
+					let bit = (bytes[byteIndex] & (1 << (7 - bitIndex))) != 0 ? '1' : '0'
 					bitIndex++
 					return bit
 				}
@@ -86,18 +86,16 @@
 
 				let byteIdx = 2
 				for (let i = 0; i < frameCount; i++) {
-					let frameBytes = bytes.charCodeAt(pos) << 16 | bytes.charCodeAt(pos+1) << 8 | bytes.charCodeAt(pos+2) & 0xFF
-					let frameBits = bytes.charCodeAt(pos+3) & 0xFF
+					let frameBytes = bytes[pos] << 16 | bytes[pos+1] << 8 | bytes[pos+2] & 0xFF
+					let frameBits = bytes[pos+3] & 0xFF
 					byteIdx += frameBytes
 					frameSizes.push({bytes: byteIdx, bits: frameBits})
 					pos += 4
 				}
-				console.log(frameSizes)
-				
 				state.fIndex = 0
 				
 				let preBytes = pos
-				window.contourSum = 0
+				window.compSize = 0
 				function playFrame() {
 				    let sTime = Number(new Date)
 					if (state.fIndex>0) {
@@ -120,83 +118,81 @@
 					let imdata = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
 
 					for (let colorIndex = 0; colorIndex < colorCount; colorIndex++) {
-						if (getBit() == '0') {
-							continue;
-						}
-						let red = getByte()
-						let green = getByte()
-						let blue = getByte()
+						let bit = getBit()
+						if (bit == '0') {
+							state.fIndex++
+							playFrame()
+							return
+						} else {
+							let red = getByte()
+							let green = getByte()
+							let blue = getByte()
 
-						let contourCount
-						
-						contourCount = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
-						
-						window.contourSum += contourCount
-						
-						let knots = []
-
-						for (let contourIndex = 0; contourIndex < contourCount; contourIndex++) {
-							let firstPointX = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
+							let contourCount = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())						
 							
-							let firstPointY = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
+							compSize += 6
 
-							let innerContourCount
-							
-							if (getBit() == '1') {
+							let knots = []
+							for (let contourIndex = 0; contourIndex < contourCount; contourIndex++) {
+								let firstPointX = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
+								let firstPointY = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
+								let innerContourCount
+								
+								compSize += 2
+								
 								if (getBit() == '1') {
-									innerContourCount = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
-								}
-								else {
-									innerContourCount = getByte()
-								}
-							} else {
-								innerContourCount = 1;
-							}
-
-							let curPoint = {x: firstPointX, y: firstPointY}
-							let curDelta = {x: 0, y: 0}
-
-							let idx = FRAME_WIDTH * curPoint.y * 4 + curPoint.x * 4
-							imdata.data[idx] = red
-							imdata.data[idx + 1] = green
-							imdata.data[idx + 2] = blue
-							imdata.data[idx + 3] = 255
-
-							knots.push(curPoint)
-
-							for (let innerContourIndex = 1; innerContourIndex < innerContourCount; innerContourIndex++) {
-								let bitIsDifferent = getBit() == '1'
-
-								if (bitIsDifferent) {
-									let x;
-									let y;
 									if (getBit() == '1') {
-										x = (getBit() == '1' ? -1 : 1) * (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
-										y = (getBit() == '1' ? -1 : 1) * (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
-									} else {
-										let delta = mSmallDeltas[getBit() << 2 | getBit() << 1 | getBit()]
-										x = delta.x
-										y = delta.y
+										innerContourCount = (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
 									}
-									curDelta = {x: x, y: y}
+									else {
+										innerContourCount = getByte()
+									}
 								} else {
+									innerContourCount = 1;
 								}
-								
-								curPoint.x += curDelta.x
-								curPoint.y += curDelta.y
-								
-								knots.push({x: curPoint.x, y: curPoint.y})
-								
-								let idx = FRAME_WIDTH * curPoint.y * 4 + curPoint.x * 4
 
+								let curPoint = {x: firstPointX, y: firstPointY}
+								let curDelta = {x: 0, y: 0}
+
+								let idx = FRAME_WIDTH * curPoint.y * 4 + curPoint.x * 4
 								imdata.data[idx] = red
 								imdata.data[idx + 1] = green
 								imdata.data[idx + 2] = blue
 								imdata.data[idx + 3] = 255
+
+								knots.push(curPoint)
+
+								for (let innerContourIndex = 1; innerContourIndex < innerContourCount; innerContourIndex++) {
+									let bitIsDifferent = getBit() == '1'
+
+									if (bitIsDifferent) {
+										let x;
+										let y;
+										if (getBit() == '1') {
+											x = (getBit() == '1' ? -1 : 1) * (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
+											y = (getBit() == '1' ? -1 : 1) * (getBit() << 11 | getBit() << 10 | getBit() << 9 | getBit() << 8 | getBit() << 7 | getBit() << 6 | getBit() << 5 | getBit() << 4 | getBit() << 3 | getBit() << 2 | getBit() << 1 | getBit())
+										} else {
+											let delta = mSmallDeltas[getBit() << 2 | getBit() << 1 | getBit()]
+											x = delta.x
+											y = delta.y
+										}
+										curDelta = {x: x, y: y}
+									} else {
+									}
+									
+									curPoint.x += curDelta.x
+									curPoint.y += curDelta.y
+									
+									knots.push({x: curPoint.x, y: curPoint.y})
+									
+									let idx = FRAME_WIDTH * curPoint.y * 4 + curPoint.x * 4
+
+									imdata.data[idx] = red
+									imdata.data[idx + 1] = green
+									imdata.data[idx + 2] = blue
+									imdata.data[idx + 3] = 255
+								}
 							}
-							
-							shapes.push(knots)
-							knots = []
 						}
 					}
 					
@@ -214,36 +210,8 @@
 					}
 					
 					ctx.putImageData(imdata, 0, 0)
-
-					/*ctx.lineWidth = 1
-					ctx.lineCap = 'round'
-					ctx.lineJoin = 'round'
-					ctx.strokeStyle = '#000000'
-					for (let shapeIndex = 0, shapeCount = shapes.length; shapeIndex < shapeCount; shapeIndex++) {
-						//colors[shapeIndex]
-						let knots = shapes[shapeIndex]
-						
-
-						let strokey = {x: [], y: []}
-						for (let knotIndex = 0, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
-							strokey.x.push(knots[knotIndex].x)
-							strokey.y.push(knots[knotIndex].y)
-						}
-						let prims = addstroke(strokey, 0, 0)
-						ctx.lineWidth = 2
-						ctx.beginPath()
-						ctx.moveTo(knots[0].x, knots[0].y)
-						for (let knotIndex = 1, knotCount = knots.length; knotIndex < knotCount; knotIndex++) {
-							ctx.lineTo(knots[knotIndex].x, knots[knotIndex].y)
-						}
-						//for (let primIndex = 0, primCount = prims.length; primIndex < primCount; primIndex++) {
-						//	prims[primIndex].render(ctx)
-						//}
-						//ctx.closePath()
-						ctx.stroke()
-					}*/
-					
 					state.fIndex++
+					
 					let fTime = Number(new Date) - sTime
 					//state.prevFrame = imdata.data
 					if (fTime > 41) {
@@ -254,7 +222,7 @@
 				}
 				playFrame()
             }
-            reader.readAsBinaryString(bitstream)
+            reader.readAsArrayBuffer(bitstream)
         }
         xhrData.open('GET', 'chroma.txt', true)
         xhrData.send(null)

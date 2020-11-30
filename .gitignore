@@ -1,2 +1,4 @@
 chroma.txt
 chroma_old.txt
+*.txt
+chroma_50KB.txt
