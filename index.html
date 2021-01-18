@@ -14,27 +14,50 @@
     <title>vecvid</title>
 </head>
 <body>
-    <script src="primitives/Primitive.js"></script>
-	<script src="primitives/Lineto.js"></script>
+	<script src="primitives/Primitive.js"></script>
 	<script src="primitives/Moveto.js"></script>
+	<script src="primitives/Lineto.js"></script>
 	<script src="primitives/BezierCurve.js"></script>
-    <script src="jSignature.js"></script>
-    <script src="simplify.js"></script>
+	<script src="jSignature.js"></script>
+	<script src="simplify.js"></script>
     <script>
 		const FRAME_WIDTH = 1920
 		const FRAME_HEIGHT = 800
+		
+		function sqDist(p1, p2) {
+			return (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y);
+		}
 	
         let canvasEl = document.createElement('canvas')
+		let canvas2El = document.createElement('canvas')
         canvasEl.width = FRAME_WIDTH
         canvasEl.height = FRAME_HEIGHT
-		let canvasWidth = FRAME_WIDTH / 3
-		let canvasHeight = FRAME_HEIGHT / 3
+		canvas2El.width = FRAME_WIDTH
+        canvas2El.height = FRAME_HEIGHT
+		let canvasWidth = innerWidth / 2
+		let canvasHeight = FRAME_HEIGHT / FRAME_WIDTH * innerWidth / 2
 		canvasEl.style.width = canvasWidth + 'px'
 		canvasEl.style.height = canvasHeight + 'px'
-		canvasEl.style.margin = ((innerHeight - canvasHeight) / 2) + 'px ' + ((innerWidth - canvasWidth) / 2) + 'px'
+		canvas2El.style.width = canvasWidth + 'px'
+		canvas2El.style.height = canvasHeight + 'px'
+		canvasEl.style.margin = ((innerHeight - canvasHeight * 2) * 2) + 'px ' + ((innerWidth - canvasWidth * 2) / 2) + 'px'
+		canvas2El.style.margin = ((innerHeight - canvasHeight * 2) * 2) + 'px ' + ((innerWidth - canvasWidth * 2) / 2) + 'px'
         document.body.appendChild(canvasEl)
+		document.body.appendChild(canvas2El)
+
+		function getSplinePrimitivesFromKnots(knots) {
+			var simplifiedPointsForCurveFitting = {x: [], y: []};
+			
+			simplifiedPoints = knots.forEach(function (curValue) { // using Simplify.js's line smoothing algorithms
+				simplifiedPointsForCurveFitting.x.push(curValue.x)
+				simplifiedPointsForCurveFitting.y.push(curValue.y)
+			})
+			
+			return addstroke(simplifiedPointsForCurveFitting, 0, 0) // using jSignature's curve fitting algorithm
+		}
 
         let ctx = canvasEl.getContext('2d')
+		let ctx2 = canvas2El.getContext('2d')
 
         let xhrData = new XMLHttpRequest
         xhrData.responseType = 'blob'
@@ -94,6 +117,7 @@
 				}
 				state.fIndex = 0
 				
+				const SQRT8 = Math.sqrt(8)
 				let preBytes = pos
 				window.compSize = 0
 				function playFrame() {
@@ -116,7 +140,7 @@
 					ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
 
 					let imdata = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
-
+					let frameKnots = [];
 					for (let colorIndex = 0; colorIndex < colorCount; colorIndex++) {
 						let bit = getBit()
 						if (bit == '0') {
@@ -182,7 +206,7 @@
 									
 									curPoint.x += curDelta.x
 									curPoint.y += curDelta.y
-									
+										
 									knots.push({x: curPoint.x, y: curPoint.y})
 									
 									let idx = FRAME_WIDTH * curPoint.y * 4 + curPoint.x * 4
@@ -193,6 +217,8 @@
 									imdata.data[idx + 3] = 255
 								}
 							}
+							
+							frameKnots.push(knots);
 						}
 					}
 					
@@ -210,6 +236,64 @@
 					}
 					
 					ctx.putImageData(imdata, 0, 0)
+					
+					let newKnots = [];
+					frameKnots.forEach((knots) => {
+						while (knots.length) {
+							let cont = false;
+							ctx.beginPath()
+							ctx.moveTo(knots[0].x, knots[0].y)
+							let minX = knots[0].x;
+							let maxX = knots[0].x;
+							let minY = knots[0].y;
+							let maxY = knots[0].y;
+							for (let i = 1, len = knots.length; i < len; i++) {
+								let knot = knots[i];
+								let dist = sqDist(knot, knots[i-1]);
+								if (dist > 64) {
+									//if ((maxX - minX) * (maxY - minY) > SQRT8) {
+										newKnots.push(knots.slice(0, i))
+									//}
+									knots = knots.slice(i);
+									cont = true;
+									break;
+								}
+								/*minX = Math.min(minX, knot.x);
+								maxX = Math.max(maxX, knot.x);
+								minY = Math.min(minY, knot.y);
+								maxY = Math.max(maxY, knot.y);*/
+							}
+							if (cont) {
+								continue;
+							}
+							//if ((maxX - minX) * (maxY - minY) > SQRT8) {
+								newKnots.push(Array.from(knots))
+							//}
+							knots = [];
+						}
+					})
+					
+					ctx2.clearRect(0, 0, ctx2.canvas.width, ctx2.canvas.height)
+					ctx2.strokeStyle = '#ffffff';
+					ctx2.lineCap = 'round';
+					ctx2.lineJoin = 'round';
+					ctx2.lineWidth = 5;
+					newKnots.forEach((knots) => {
+						knots = simplify(knots, 3)
+						let curves = getSplinePrimitivesFromKnots(knots)
+						ctx2.beginPath();
+						curves.forEach((prim) => {
+							prim.render(ctx2);
+						})
+						ctx2.stroke()
+						/*ctx.beginPath()
+						ctx.moveTo(knots[0].x, knots[0].y)
+						knots.slice(1).forEach((knot) => {
+							ctx.lineTo(knot.x, knot.y)
+						})
+						ctx.stroke()*/
+					})
+					
 					state.fIndex++
 					
 					let fTime = Number(new Date) - sTime
