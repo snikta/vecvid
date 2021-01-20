@@ -34,14 +34,14 @@
         canvasEl.height = FRAME_HEIGHT
 		canvas2El.width = FRAME_WIDTH
         canvas2El.height = FRAME_HEIGHT
-		let canvasWidth = innerWidth / 2
-		let canvasHeight = FRAME_HEIGHT / FRAME_WIDTH * innerWidth / 2
+		let canvasWidth = innerWidth
+		let canvasHeight = FRAME_HEIGHT / FRAME_WIDTH * innerWidth
 		canvasEl.style.width = canvasWidth + 'px'
 		canvasEl.style.height = canvasHeight + 'px'
 		canvas2El.style.width = canvasWidth + 'px'
 		canvas2El.style.height = canvasHeight + 'px'
-		canvasEl.style.margin = ((innerHeight - canvasHeight * 2) * 2) + 'px ' + ((innerWidth - canvasWidth * 2) / 2) + 'px'
-		canvas2El.style.margin = ((innerHeight - canvasHeight * 2) * 2) + 'px ' + ((innerWidth - canvasWidth * 2) / 2) + 'px'
+		canvasEl.style.margin = ((innerHeight - canvasHeight) / 2) + 'px ' + ((innerWidth - canvasWidth) / 2) + 'px'
+		canvas2El.style.margin = ((innerHeight - canvasHeight) / 2) + 'px ' + ((innerWidth - canvasWidth) / 2) + 'px'
         document.body.appendChild(canvasEl)
 		document.body.appendChild(canvas2El)
 
@@ -251,47 +251,39 @@
 								let knot = knots[i];
 								let dist = sqDist(knot, knots[i-1]);
 								if (dist > 64) {
-									//if ((maxX - minX) * (maxY - minY) > SQRT8) {
+									if ((maxX - minX) * (maxY - minY) > 100) {
 										newKnots.push(knots.slice(0, i))
-									//}
+									}
 									knots = knots.slice(i);
 									cont = true;
 									break;
 								}
-								/*minX = Math.min(minX, knot.x);
+								minX = Math.min(minX, knot.x);
 								maxX = Math.max(maxX, knot.x);
 								minY = Math.min(minY, knot.y);
-								maxY = Math.max(maxY, knot.y);*/
+								maxY = Math.max(maxY, knot.y);
 							}
 							if (cont) {
 								continue;
 							}
-							//if ((maxX - minX) * (maxY - minY) > SQRT8) {
+							if ((maxX - minX) * (maxY - minY) > 100) {
 								newKnots.push(Array.from(knots))
-							//}
+							}
 							knots = [];
 						}
 					})
 					
-					ctx2.clearRect(0, 0, ctx2.canvas.width, ctx2.canvas.height)
-					ctx2.strokeStyle = '#ffffff';
-					ctx2.lineCap = 'round';
-					ctx2.lineJoin = 'round';
-					ctx2.lineWidth = 5;
+					ctx.lineWidth = 1;
+					ctx.lineCap = 'round';
+					ctx.lineJoin = 'round';
 					newKnots.forEach((knots) => {
 						knots = simplify(knots, 3)
 						let curves = getSplinePrimitivesFromKnots(knots)
-						ctx2.beginPath();
+						ctx.beginPath();
 						curves.forEach((prim) => {
-							prim.render(ctx2);
+							prim.render(ctx);
 						})
-						ctx2.stroke()
-						/*ctx.beginPath()
-						ctx.moveTo(knots[0].x, knots[0].y)
-						knots.slice(1).forEach((knot) => {
-							ctx.lineTo(knot.x, knot.y)
-						})
-						ctx.stroke()*/
+						ctx.stroke()
 					})
 					
 					state.fIndex++
@@ -312,4 +304,4 @@
         xhrData.send(null)
     </script>
 </body>
-</html>
+</html>:
